@@ -5,7 +5,7 @@
 -include_lib("kvs/include/users.hrl").
 -compile(export_all).
 -export(?API).
--define(ENVIRONMENT, case application:get_env(web, pweb_environemnt) of {ok, K} -> K;_-> "sandbox" end).
+-define(ENVIRONMENT, application:get_env(web, pweb_environemnt, {ok, "sandbox"})).
 -define(CONSUMER_KEY, case application:get_env(web, pweb_consumer_key) of {ok, K} -> K;_-> "" end).
 -define(CONSUMER_SECRET, case application:get_env(web, pweb_consumer_secret) of {ok, S} -> S; _-> "" end).
 -define(CONSUMER, {?CONSUMER_KEY, ?CONSUMER_SECRET, hmac_sha1}).
@@ -70,7 +70,7 @@ event({passaporte_web,loginpassaporte_web}) ->
          {error, R} -> error_logger:info_msg("Passaporte Web request failed:", [R]), [] end.
 
 get_request_token()->
-  URL = "https://app.passaporteweb.com.br/sso/initiate/",
+  URL = get_passaporte_url(?ENVIRONMENT, "/sso/initiate/"),
   case oauth:get(URL, [], ?CONSUMER) of
     {ok, Response} ->
       Params = oauth:params_decode(Response),
@@ -85,7 +85,7 @@ get_access_token(undefined, undefined)-> not_authorized;
 get_access_token(undefined, _)-> not_authorized;
 get_access_token(_, undefined)-> not_authorized;
 get_access_token(Token, Verifier)->
-  URL = "https://app.passaporteweb.com.br/sso/token/",
+  URL = get_passaporte_url(?ENVIRONMENT, "/sso/token/"),
   Signed = oauth:sign("GET", URL, [{"oauth_verifier", Verifier}], ?CONSUMER, Token, ""),
   {OauthParams, QueryParams} = lists:partition(fun({K, _}) -> lists:prefix("oauth_", K) end, Signed),
   Request = {oauth:uri(URL, QueryParams), [oauth:header(OauthParams)]},
@@ -102,10 +102,11 @@ get_access_token(Token, Verifier)->
   end.
 
 authorize_url(RequestToken)->
-    oauth:uri("https://app.passaporteweb.com.br/sso/authorize/", [{"oauth_token", RequestToken}]).
+    URL = get_passaporte_url(?ENVIRONMENT, "/sso/authorize/"),
+    oauth:uri(URL, [{"oauth_token", RequestToken}]).
 
 show(Props)->
-  URI = "https://app.passaporteweb.com.br/sso/fetchuserdata/",
+  URI = get_passaporte_url(?ENVIRONMENT, "/sso/fetchuserdata/"),
   {ok, Response} = oauth:get(URI, [], ?CONSUMER, oauth:token(Props), oauth:token_secret(Props)),
   case Response of
     {HttpResponse, _, Body} ->
@@ -162,3 +163,11 @@ delete()->
       end;
     _ -> ok
   end.
+
+get_passaporte_url(Environment, Path) ->
+    Host = case Environment of
+        {ok, "production"} -> "https://app.passaporteweb.com.br";
+        {ok, "sandbox"} -> "http://sandbox.app.passaporteweb.com.br";
+        _ -> {error, "Invalid environment name"}
+    end,
+    Host ++ Path.
