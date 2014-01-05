@@ -5,6 +5,7 @@
 -include_lib("kvs/include/users.hrl").
 -compile(export_all).
 -export(?API).
+-define(HTTP_ADDRESS, application:get_env(web, http_address)).
 -define(ENVIRONMENT, application:get_env(web, pweb_environemnt, {ok, "sandbox"})).
 -define(CONSUMER_KEY, case application:get_env(web, pweb_consumer_key) of {ok, K} -> K;_-> "" end).
 -define(CONSUMER_SECRET, case application:get_env(web, pweb_consumer_secret) of {ok, S} -> S; _-> "" end).
@@ -71,7 +72,13 @@ event({passaporte_web,loginpassaporte_web}) ->
 
 get_request_token()->
   URL = get_passaporte_url(?ENVIRONMENT, "/sso/initiate/"),
-  case oauth:get(URL, [], ?CONSUMER) of
+  ApplicationHost = case ?HTTP_ADDRESS of
+    {ok, Address} -> Address;
+    _ -> ""
+  end,
+  CallbackUrl = ApplicationHost ++ "/login",
+  Params = [{"oauth_callback", CallbackUrl}],
+  case oauth:get(URL, Params, ?CONSUMER) of
     {ok, Response} ->
       Params = oauth:params_decode(Response),
       RequestToken = oauth:token(Params),
